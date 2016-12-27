@@ -291,7 +291,49 @@ set(CPACK_BUNDLE_NAME libiio)
 set(CPACK_PACKAGE_VERSION ${LIBIIO_VERSION})
 # debian specific package settings
 set(CPACK_PACKAGE_CONTACT "Engineerzone <https://ez.analog.com/community/linux-device-drivers>")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libaio-dev (>= 0.3.109-4), libavahi-client-dev (>= 0.6.31-4), libavahi-common-dev (>= 0.6.31-4), libc6-dev (>= 2.19-0), libusb-1.0-0-dev (>= 2:1.0.17-1), libxml2-dev (>= 2.9.1+dfsg1-3)")
+# find what is needed, based on what is turned on/installed
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+	FIND_PROGRAM(DPKG_CMD dpkg)
+	FIND_PROGRAM(DPKGQ_CMD dpkg-query)
+	execute_process(COMMAND "${DPKG_CMD}" --print-architecture 
+		OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE
+		OUTPUT_STRIP_TRAILING_WHITESPACE)
+	set(PACKAGES "libc6")
+	if (WITH_LOCAL_BACKEND)
+		set(PACKAGES "${PACKAGES} libaio")
+	endif()
+	if(HAVE_AVAHI)
+		set(PACKAGES "${PACKAGES} libavahi-client libavahi-common")
+	endif()
+	if(WITH_USB_BACKEND)
+		set(PACKAGES "${PACKAGES} libusb-1")
+	endif()
+	if(WITH_XML_BACKEND)
+		set(PACKAGES "${PACKAGES} libxml2")
+	endif()
+	string(REGEX REPLACE " " ";" PACKAGES ${PACKAGES})
+	foreach(package ${PACKAGES})
+		execute_process(COMMAND "${DPKG_CMD}" -l ${package}*
+			OUTPUT_VARIABLE DPKG_INSTALLED_PACKAGES)
+		STRING(REGEX MATCHALL "ii  ${package}[a-z0-9A-Z.-]*" NAME_LIBAIO 
+			${DPKG_INSTALLED_PACKAGES})
+		STRING(REGEX REPLACE "ii  " ";" NAME_LIBAIO2 ${NAME_LIBAIO})
+		foreach(match ${NAME_LIBAIO2})
+			STRING(REGEX MATCHALL "dev|dbg|doc|utils" NAME2_LIBAIO ${match})
+			if("${NAME2_LIBAIO}" STREQUAL "")
+				execute_process(COMMAND "${DPKGQ_CMD}"
+				       		 --showformat='\${Version}'
+						 --show "${match}"
+						OUTPUT_VARIABLE NAME3_LIBAIO)
+				string(REGEX REPLACE "[+-][a-z0-9A-Z.]*" "" NAME3_LIBAIO ${NAME3_LIBAIO})
+				string(REGEX REPLACE "'" ""  NAME3_LIBAIO ${NAME3_LIBAIO})
+				set(CPACK_DEBIAN_PACKAGE_DEPENDS
+					"${CPACK_DEBIAN_PACKAGE_DEPENDS}${match} (>= ${NAME3_LIBAIO}), ")
+			endif()
+		endforeach(match)
+	endforeach(package)
+	string(REGEX REPLACE ", $" "" CPACK_DEBIAN_PACKAGE_DEPENDS ${CPACK_DEBIAN_PACKAGE_DEPENDS})
+endif()
 include(CPack)
 
 add_library(iio ${LIBIIO_CFILES} ${LIBIIO_HEADERS})
