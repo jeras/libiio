@@ -24,6 +24,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <stdio.h>
+#include <lmcons.h>
+#else
+#include <unistd.h>
+#include <sys/types.h>
+#endif
 
 #define MY_NAME "iio_info"
 
@@ -68,6 +76,34 @@ static void usage(void)
 					options_descriptions[i]);
 }
 
+static bool isadmin(void)
+{
+	bool ret = false;
+
+#ifdef _WIN32
+	HANDLE hToken = NULL;
+
+	if(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+		TOKEN_ELEVATION Elevation;
+		DWORD cbSize = sizeof(TOKEN_ELEVATION);
+
+		if(GetTokenInformation(hToken, TokenElevation, &Elevation,
+					sizeof(Elevation), &cbSize))
+			ret = Elevation.TokenIsElevated;
+
+		if(hToken)
+			CloseHandle(hToken);
+	}
+#else
+	uid_t uid = getuid(), euid = geteuid();
+
+	if (uid == 0 || uid != euid)
+		ret = true;
+#endif
+
+	return ret;
+
+}
 static void scan(void)
 {
 	struct iio_scan_context *ctx;
@@ -83,9 +119,12 @@ static void scan(void)
 
 	ret = iio_scan_context_get_info_list(ctx, &info);
 	if (ret < 0) {
-		fprintf(stderr, "Unable to scan: %li\n", (long) ret);
+		fprintf(stderr, "Unable to scan: %s (%li)\n", strerror(-ret), (long) ret);
 		goto err_free_ctx;
 	}
+
+	if (!isadmin())
+		fprintf(stderr, "Could be missing contexts, since not running as root or administrator\n");
 
 	if (ret == 0) {
 		printf("No contexts found.\n");
