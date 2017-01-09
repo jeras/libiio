@@ -278,7 +278,7 @@ endif()
 
 # support creating some basic binpkgs via `make package`
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-	set(CPACK_GENERATOR TBZ2;RPM;DEB)
+	set(CPACK_GENERATOR TGZ;RPM;DEB)
 endif()
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set(CPACK_GENERATOR TGZ)
